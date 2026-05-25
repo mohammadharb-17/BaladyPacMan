@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Mall Heatwave</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#1a2a3a;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:flex-start;
+  min-height:100vh; font-family:'Segoe UI',sans-serif;
+  overflow:hidden; touch-action:none;
+}
+
+/* ── HUD ── */
+#ui {
+  display:flex; align-items:center; justify-content:space-between;
+  width:100%; max-width:600px; padding:6px 10px;
+  background:linear-gradient(90deg,#0d2233,#0a3040,#0d2233);
+  border-bottom:2px solid #1e6080; color:#fff;
+  font-size:12px; gap:6px; flex-shrink:0;
+}
+.score-block { display:flex; flex-direction:column; align-items:center; }
+.label { font-size:9px; color:#7bc; text-transform:uppercase; letter-spacing:1px; }
+.value { font-size:17px; font-weight:900; color:#4df; }
+#lives { display:flex; gap:3px; align-items:center; }
+.life-img { width:22px; height:22px; object-fit:contain; }
+.hud-btn {
+  background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);
+  color:#fff; border-radius:20px; padding:4px 9px; font-size:12px;
+  cursor:pointer; white-space:nowrap; flex-shrink:0;
+}
+.hud-btn:hover { background:rgba(77,221,255,0.2); }
+#powerup-bar {
+  width:100%; max-width:600px; height:5px;
+  background:rgba(255,255,255,0.08); display:none; flex-shrink:0;
+}
+#powerup-fill {
+  height:100%;
+  background:linear-gradient(90deg,#00e5ff,#a78bfa);
+  transition:width 0.1s linear; width:100%;
+}
+
+/* ── Canvas wrap ── */
+#canvas-wrap {
+  position:relative; width:100%; max-width:600px;
+  flex:1; display:flex; align-items:flex-start;
+}
+canvas { display:block; image-rendering:crisp-edges; image-rendering:pixelated; }
+
+/* ── Overlays (shared) ── */
+.overlay-panel {
+  position:absolute; inset:0;
+  background:rgba(5,20,35,0.92);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  color:#fff; text-align:center; gap:14px; padding:20px;
+  backdrop-filter:blur(5px);
+}
+.overlay-panel h1 { font-size:26px; font-weight:900; color:#4df; letter-spacing:3px; }
+.overlay-panel .subtitle { font-size:11px; color:#7bc; letter-spacing:1px; }
+
+/* ── Character select ── */
+#char-select { z-index:20; }
+.char-cards {
+  display:flex; gap:18px; justify-content:center; flex-wrap:wrap;
+}
+.char-card {
+  background:rgba(255,255,255,0.06);
+  border:2px solid rgba(0,180,220,0.3);
+  border-radius:16px; padding:14px 18px;
+  cursor:pointer; transition:all 0.2s;
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+  min-width:110px;
+}
+.char-card:hover { border-color:#4df; background:rgba(0,180,220,0.12); transform:translateY(-3px); }
+.char-card.selected { border-color:#4df; background:rgba(0,200,220,0.2); box-shadow:0 0 20px rgba(0,200,220,0.4); }
+.char-card img { width:72px; height:90px; object-fit:contain; }
+.char-card .char-name { font-size:14px; font-weight:800; color:#4df; letter-spacing:1px; }
+.char-card .char-desc { font-size:10px; color:#abc; }
+
+/* ── Main menu overlay ── */
+#overlay { z-index:10; }
+.legend-grid {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:6px 20px; text-align:left; font-size:11px; color:#abc;
+}
+.legend-item { display:flex; align-items:center; gap:6px; }
+.legend-item img { width:20px; height:20px; object-fit:contain; }
+.instructions { font-size:11px; color:#7bc; line-height:1.8; }
+
+/* ── Pause overlay ── */
+#pause-overlay { z-index:15; display:none; }
+#pause-overlay h2 { font-size:32px; font-weight:900; color:#4df; letter-spacing:4px; }
+#pause-overlay p { color:#abc; font-size:13px; }
+
+/* ── Stage flash ── */
+#stage-flash {
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none; opacity:0;
+  font-size:32px; font-weight:900; color:#fff;
+  text-shadow:0 0 30px #4df, 0 0 60px #4df;
+  transition:opacity 0.4s; z-index:5;
+}
+
+/* ── Shared button ── */
+.big-btn {
+  background:linear-gradient(135deg,#00c9d4,#0077aa);
+  border:none; color:#fff; padding:11px 32px; border-radius:30px;
+  font-size:14px; font-weight:800; cursor:pointer; letter-spacing:1px;
+  box-shadow:0 4px 24px rgba(0,200,220,0.4);
+}
+.big-btn:hover { transform:scale(1.04); }
+.ghost-btn {
+  background:transparent; border:1px solid rgba(0,200,220,0.4);
+  color:#7bc; padding:8px 22px; border-radius:20px;
+  font-size:12px; cursor:pointer;
+}
+.ghost-btn:hover { border-color:#4df; color:#4df; }
+
+/* ── D-pad ── */
+#dpad {
+  display:none; position:absolute;
+  bottom:14px; left:14px;
+  width:110px; height:110px; z-index:6;
+}
+.dpad-btn {
+  position:absolute; width:34px; height:34px;
+  background:rgba(0,80,120,0.55); border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px; user-select:none; cursor:pointer;
+  border:1px solid rgba(0,180,220,0.35); color:#9ef;
+}
+.dpad-btn:active { background:rgba(0,180,220,0.4); }
+#dpad-up    { top:0;    left:38px; }
+#dpad-down  { bottom:0; left:38px; }
+#dpad-left  { top:38px; left:0; }
+#dpad-right { top:38px; right:0; }
+</style>
+</head>
+<body>
+
+<!-- HUD -->
+<div id="ui">
+  <div class="score-block">
+    <span class="label">Score</span>
+    <span class="value" id="score-val">0</span>
+  </div>
+  <div class="score-block">
+    <span class="label">Floor</span>
+    <span class="value" id="floor-val">1</span>
+  </div>
+  <div class="score-block">
+    <span class="label">Lives</span>
+    <div id="lives"></div>
+  </div>
+  <button class="hud-btn" id="pause-btn">⏸ Pause</button>
+  <button class="hud-btn" id="sound-btn">🔊</button>
+</div>
+<div id="powerup-bar"><div id="powerup-fill"></div></div>
+
+<div id="canvas-wrap">
+  <canvas id="c"></canvas>
+
+  <!-- Character Select Screen -->
+  <div class="overlay-panel" id="char-select">
+    <h1>🛍️ MALL HEATWAVE</h1>
+    <p class="subtitle">CHOOSE YOUR SHOPPER</p>
+    <div class="char-cards">
+      <div class="char-card" id="card-a" onclick="selectChar('A')">
+        <img id="preview-a" src="Player_A_Forward.png" alt="Sara" onerror="this.style.opacity='0.3'">
+        <div class="char-name">SARA</div>
+        <div class="char-desc">Master shopper</div>
+      </div>
+      <div class="char-card" id="card-b" onclick="selectChar('B')">
+        <img id="preview-b" src="Player_B_Forward.png" alt="Saud" onerror="this.style.opacity='0.3'">
+        <div class="char-name">SAUD</div>
+        <div class="char-desc">Speed runner</div>
+      </div>
+    </div>
+    <button class="big-btn" id="to-menu-btn" onclick="goToMenu()" style="opacity:0.4;pointer-events:none;">SELECT A CHARACTER ▶</button>
+    <p style="font-size:10px;color:#7bc;">Place Player_A_Forward.png, Player_A_Left.png, Player_A_Right.png, Player_A_Backward.png<br>(same for Player_B_*) in the same folder as this HTML file</p>
+  </div>
+
+  <!-- Main Menu -->
+  <div class="overlay-panel" id="overlay" style="display:none;">
+    <h1>🛍️ MALL HEATWAVE</h1>
+    <p class="subtitle">STAY COOL · COLLECT · SURVIVE</p>
+    <div class="legend-grid" id="legend-grid"></div>
+    <div class="instructions">
+      WASD / Arrow Keys / D-pad / Swipe &amp; Hold<br>
+      Collect all water → find the escalator → next floor!<br>
+      Escalator restores all 3 lives ❤️❤️❤️
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+      <button class="big-btn" id="start-btn">▶ START GAME</button>
+      <button class="ghost-btn" onclick="goToCharSelect()">Change Character</button>
+    </div>
+  </div>
+
+  <!-- Pause Overlay -->
+  <div class="overlay-panel" id="pause-overlay">
+    <h2>⏸ PAUSED</h2>
+    <p>Press ESC or tap Resume to continue</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
+      <button class="big-btn" onclick="togglePause()">▶ Resume</button>
+      <button class="ghost-btn" onclick="goToCharSelect()">Quit to Menu</button>
+    </div>
+  </div>
+
+  <!-- Stage flash -->
+  <div id="stage-flash"></div>
+
+  <!-- D-pad -->
+  <div id="dpad">
+    <div class="dpad-btn" id="dpad-up">▲</div>
+    <div class="dpad-btn" id="dpad-down">▼</div>
+    <div class="dpad-btn" id="dpad-left">◀</div>
+    <div class="dpad-btn" id="dpad-right">▶</div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  IMAGE PATHS  — all loaded from same folder as the HTML file
+//  Replace any .png file on disk and it auto-updates on refresh
+// ════════════════════════════════════════════════════════════════
+const IMG_PATHS = {
+  // Characters — A = Sara, B = Saud
+  // Directions: Forward (toward screen), Backward, Left, Right
+  Player_A_Forward:  'Player_A_Forward.png',
+  Player_A_Backward: 'Player_A_Backward.png',
+  Player_A_Left:     'Player_A_Left.png',
+  Player_A_Right:    'Player_A_Right.png',
+
+  Player_B_Forward:  'Player_B_Forward.png',
+  Player_B_Backward: 'Player_B_Backward.png',
+  Player_B_Left:     'Player_B_Left.png',
+  Player_B_Right:    'Player_B_Right.png',
+
+  // Collectables
+  water:    'water.png',
+  coffee:   'coffee.png',
+  ice:      'ice.png',
+  icecream: 'icecream.png',
+
+  // Enemies
+  heatwave: 'heatwave.png',
+  frozen:   'frozen.png',
+
+  // UI / Map
+  escalator_off: 'escalator_off.png',   // grey escalator (locked)
+  escalator_on:  'escalator_on.png',    // blue escalator (active)
+};
+
+// ── Image loader ──────────────────────────────────────────────────────────────
+const IMGS = {};
+let imgsReady = false;
+function loadImgs(cb) {
+  const keys = Object.keys(IMG_PATHS);
+  let loaded = 0;
+  keys.forEach(k => {
+    const img = new Image();
+    img.onload  = () => { loaded++; if(loaded===keys.length) { imgsReady=true; cb(); } };
+    img.onerror = () => { loaded++; if(loaded===keys.length) { imgsReady=true; cb(); } };
+    img.src = IMG_PATHS[k];
+    IMGS[k] = img;
+  });
+}
+
+// Helper: draw img if loaded, else skip
+function drawImg(key, x, y, w, h) {
+  const img = IMGS[key];
+  if (img && img.naturalWidth > 0) ctx.drawImage(img, x, y, w, h);
+  else {
+    // placeholder circle
+    ctx.fillStyle = 'rgba(100,200,255,0.5)';
+    ctx.fillRect(x, y, w, h);
+  }
+}
+
+// ── Character selection ───────────────────────────────────────────────────────
+let selectedChar = null; // 'A' or 'B'
+
+function selectChar(id) {
+  selectedChar = id;
+  document.getElementById('card-a').classList.toggle('selected', id==='A');
+  document.getElementById('card-b').classList.toggle('selected', id==='B');
+  const btn = document.getElementById('to-menu-btn');
+  btn.textContent = (id==='A' ? 'Play as Sara ▶' : 'Play as Saud ▶');
+  btn.style.opacity = '1';
+  btn.style.pointerEvents = 'auto';
+}
+
+function goToMenu() {
+  document.getElementById('char-select').style.display = 'none';
+  document.getElementById('overlay').style.display = 'flex';
+  buildLegend();
+}
+
+function goToCharSelect() {
+  gameRunning = false; paused = false;
+  stopMusic();
+  document.getElementById('pause-overlay').style.display = 'none';
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('char-select').style.display = 'flex';
+  // reset selected highlight
+  selectedChar = null;
+  document.getElementById('card-a').classList.remove('selected');
+  document.getElementById('card-b').classList.remove('selected');
+  document.getElementById('to-menu-btn').textContent = 'SELECT A CHARACTER ▶';
+  document.getElementById('to-menu-btn').style.opacity = '0.4';
+  document.getElementById('to-menu-btn').style.pointerEvents = 'none';
+}
+
+// ── Get directional sprite key based on movement ──────────────────────────────
+function getPlayerSprite() {
+  const ch = selectedChar || 'A';
+  const fx = playerFacing.x, fy = playerFacing.y;
+  if      (fx > 0) return `Player_${ch}_Right`;
+  else if (fx < 0) return `Player_${ch}_Left`;
+  else if (fy > 0) return `Player_${ch}_Forward`;  // moving down = facing screen
+  else if (fy < 0) return `Player_${ch}_Backward`; // moving up = facing away
+  return `Player_${ch}_Forward`; // idle default
+}
+
+// ── Audio ─────────────────────────────────────────────────────────────────────
+// Music: external files (drop in same folder as HTML)
+// SFX:   procedural Web Audio (no files needed)
+
+const MUSIC_NORMAL_SRC = 'music_normal.mp3';
+const MUSIC_FREEZE_SRC = 'music_freeze.mp3';
+
+let soundOn = true;
+let currentMusic = null;   // the active <audio> element
+let currentMusicSrc = '';  // track which file is playing
+
+function playMusic(src) {
+  if (!soundOn) return;
+  if (currentMusicSrc === src && currentMusic && !currentMusic.paused) return; // already playing
+  stopMusic();
+  const a = new Audio(src);
+  a.loop = true;
+  a.volume = 0.5;
+  // Browsers require a user gesture before play() works.
+  // By the time we call playMusic the player has already clicked Start, so this is fine.
+  const p = a.play();
+  if (p && p.catch) p.catch(()=>{}); // suppress uncaught promise warning
+  currentMusic = a;
+  currentMusicSrc = src;
+}
+
+function stopMusic() {
+  if (currentMusic) {
+    currentMusic.pause();
+    currentMusic.currentTime = 0;
+    currentMusic = null;
+    currentMusicSrc = '';
+  }
+}
+
+function pauseMusic() {
+  if (currentMusic && !currentMusic.paused) currentMusic.pause();
+}
+
+function resumeMusic() {
+  if (currentMusic && soundOn) {
+    const p = currentMusic.play();
+    if (p && p.catch) p.catch(()=>{});
+  }
+}
+
+// ── Procedural SFX (Web Audio) ────────────────────────────────────────────────
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function playTone(freq, type, dur, vol=0.3) {
+  if (!soundOn) return;
+  ensureAudio();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.connect(g); g.connect(audioCtx.destination);
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  o.start(); o.stop(audioCtx.currentTime + dur);
+}
+function playDot()      { playTone(880,'sine',0.07,0.12); }
+function playPower()    { [400,600,800,1000].forEach((f,i)=>setTimeout(()=>playTone(f,'sawtooth',0.12,0.2),i*60)); }
+function playDie()      { [400,300,200].forEach((f,i)=>setTimeout(()=>playTone(f,'sawtooth',0.15,0.28),i*100)); }
+function playKill()     { [1000,1200,900].forEach((f,i)=>setTimeout(()=>playTone(f,'square',0.08,0.18),i*60)); }
+function playEscalator(){ [500,700,900,1100].forEach((f,i)=>setTimeout(()=>playTone(f,'sine',0.2,0.25),i*80)); }
+function playPause()    { playTone(440,'sine',0.15,0.15); }
+function playStep() {
+  if (!soundOn) return;
+  ensureAudio();
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*0.03, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*0.2));
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const g = audioCtx.createGain(); g.gain.value = 0.07;
+  src.connect(g); g.connect(audioCtx.destination);
+  src.start();
+}
+// kept for compatibility — music now handled by <audio> above
+function startBgHum() { playMusic(MUSIC_FREEZE_SRC); }
+function stopBgHum()  { /* freeze music stops when power ends, handled in activatePower/update */ }
+
+document.getElementById('sound-btn').addEventListener('click', () => {
+  soundOn = !soundOn;
+  document.getElementById('sound-btn').textContent = soundOn ? '🔊' : '🔇';
+  if (!soundOn) { pauseMusic(); }
+  else          { resumeMusic(); }
+});
+
+// ── Pause ─────────────────────────────────────────────────────────────────────
+let paused = false;
+function togglePause() {
+  if (!gameRunning) return;
+  paused = !paused;
+  document.getElementById('pause-overlay').style.display = paused ? 'flex' : 'none';
+  document.getElementById('pause-btn').textContent = paused ? '▶ Resume' : '⏸ Pause';
+  playPause();
+  if (paused) {
+    pauseMusic();
+  } else {
+    resumeMusic();
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+  }
+}
+document.getElementById('pause-btn').addEventListener('click', togglePause);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); togglePause(); }
+});
+
+// ── Canvas / sizing ───────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('canvas-wrap');
+const COLS = 21, ROWS = 21;
+let TILE;
+
+function resize() {
+  const W = wrap.clientWidth;
+  const H = window.innerHeight - document.getElementById('ui').offsetHeight - 5;
+  TILE = Math.floor(Math.min(W/COLS, H/ROWS));
+  canvas.width  = COLS * TILE;
+  canvas.height = ROWS * TILE;
+  canvas.style.width  = canvas.width  + 'px';
+  canvas.style.height = canvas.height + 'px';
+}
+window.addEventListener('resize', () => { resize(); if(gameRunning && !paused) drawAll(); });
+
+// ── Tile types ────────────────────────────────────────────────────────────────
+const T = { WALL:0, PATH:1, DOT:2, POWER:3, ESCALATOR:4, STORE:5 };
+const powerTypes = {}; // "r_c" -> 0=coffee, 1=ice, 2=icecream
+const powerImgKeys = ['coffee','ice','icecream'];
+
+// ── Store names ───────────────────────────────────────────────────────────────
+const ALL_STORES = ['ZARA','H&M','SEPHORA','ALDO','LEVI\'S','NIKE','ADIDAS','PANDORA','NEXT','GAP','MANGO','GUESS','LACOSTE','STARBUCKS','BERSHKA'];
+let storeBlocks = [];
+
+// ── Game state ────────────────────────────────────────────────────────────────
+let map, dotCount, enemies;
+let score=0, lives=3, floor=1;
+let powered=false, powerTimer=0;
+const POWER_DURATION = 9000;
+let gameRunning=false;
+let escalatorActive=false;
+let lastTime=0, stepTimer=0;
+
+// ── Player (tile-snapped grid movement) ───────────────────────────────────────
+// The player always sits exactly on a tile centre (col+0.5, row+0.5).
+// When a move is queued, the player slides smoothly to the NEXT tile centre,
+// then stops — so they are always perfectly aligned to the grid.
+// This means you can ALWAYS turn at any junction without getting stuck.
+
+const PLAYER_MOVE_MS = 160; // ms to slide one tile (lower = faster)
+
+let playerCol = 1, playerRow = 1;          // current tile (grid coords)
+let playerX = 1.5, playerY = 1.5;         // pixel position (for smooth lerp render)
+let playerTargetX = 1.5, playerTargetY = 1.5; // target pixel position
+let playerMoving = false;                  // currently sliding to next tile?
+let playerMoveProgress = 0;               // 0→1 slide progress
+let playerFromX = 1.5, playerFromY = 1.5; // slide start pixel
+let playerFacing = {x:0,y:1};            // for sprite direction
+
+let queuedDir = {x:0,y:0};               // direction player wants to go next
+let heldDir   = {x:0,y:0};               // direction currently held down
+
+let invincible=false, invincibleTimer=0;
+let dying=false, dyingTimer=0;
+let playerAnim=0;
+
+// ── Input ─────────────────────────────────────────────────────────────────────
+const KEY_MAP = {
+  ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0},
+  w:{x:0,y:-1},s:{x:0,y:1},a:{x:-1,y:0},d:{x:1,y:0},
+  W:{x:0,y:-1},S:{x:0,y:1},A:{x:-1,y:0},D:{x:1,y:0}
+};
+const H_KEYS = new Set(['ArrowLeft','ArrowRight','a','d','A','D']);
+const V_KEYS = new Set(['ArrowUp','ArrowDown','w','s','W','S']);
+
+document.addEventListener('keydown', e => {
+  if (!gameRunning || paused) return;
+  if (KEY_MAP[e.key]) { nextDir = KEY_MAP[e.key]; e.preventDefault(); }
+});
+document.addEventListener('keyup', e => {
+  if (H_KEYS.has(e.key) && nextDir.y === 0) nextDir = {x:0,y:0};
+  if (V_KEYS.has(e.key) && nextDir.x === 0) nextDir = {x:0,y:0};
+});
+
+let touchStart = null;
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  touchStart = {x:t.clientX, y:t.clientY};
+}, {passive:false});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!touchStart || !gameRunning || paused) return;
+  const t = e.touches[0];
+  const dx = t.clientX - touchStart.x, dy = t.clientY - touchStart.y;
+  if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+    if (Math.abs(dx) > Math.abs(dy)) nextDir = {x:Math.sign(dx),y:0};
+    else nextDir = {x:0,y:Math.sign(dy)};
+  }
+}, {passive:false});
+canvas.addEventListener('touchend', e => {
+  e.preventDefault(); nextDir = {x:0,y:0}; touchStart = null;
+}, {passive:false});
+
+function setupDpad() {
+  const dirs = {'dpad-up':{x:0,y:-1},'dpad-down':{x:0,y:1},'dpad-left':{x:-1,y:0},'dpad-right':{x:1,y:0}};
+  Object.entries(dirs).forEach(([id,d]) => {
+    const el = document.getElementById(id);
+    el.addEventListener('touchstart', e => { e.preventDefault(); nextDir=d; }, {passive:false});
+    el.addEventListener('touchend',   e => { e.preventDefault(); nextDir={x:0,y:0}; }, {passive:false});
+    el.addEventListener('mousedown',  () => nextDir=d);
+    el.addEventListener('mouseup',    () => nextDir={x:0,y:0});
+  });
+  if ('ontouchstart' in window) document.getElementById('dpad').style.display='block';
+}
+setupDpad();
+
+// ── Map generation ────────────────────────────────────────────────────────────
+function generateMap() {
+  const g = Array.from({length:ROWS}, () => Array(COLS).fill(T.WALL));
+
+  function carve(r,c) {
+    const dirs = [[0,2],[0,-2],[2,0],[-2,0]].sort(()=>Math.random()-0.5);
+    for (const [dr,dc] of dirs) {
+      const nr=r+dr, nc=c+dc;
+      if (nr>0&&nr<ROWS-1&&nc>0&&nc<COLS-1&&g[nr][nc]===T.WALL) {
+        g[r+dr/2][c+dc/2]=T.PATH;
+        g[nr][nc]=T.PATH;
+        carve(nr,nc);
+      }
+    }
+  }
+  g[1][1]=T.PATH; carve(1,1);
+
+  for (let r=1;r<ROWS-1;r++)
+    for (let c=1;c<COLS-1;c++)
+      if (g[r][c]===T.WALL && Math.random()<0.22) g[r][c]=T.PATH;
+
+  for (let i=1;i<ROWS-1;i+=2) { g[i][1]=T.PATH; g[i][COLS-2]=T.PATH; }
+  for (let i=1;i<COLS-1;i+=2) { g[1][i]=T.PATH; g[ROWS-2][i]=T.PATH; }
+
+  // Store blocks
+  storeBlocks = [];
+  const shuffled = [...ALL_STORES].sort(()=>Math.random()-0.5);
+  let si = 0;
+  for (let attempt=0; attempt<50 && storeBlocks.length<6; attempt++) {
+    const w = Math.random()<0.5 ? 2 : 3;
+    const h = 2;
+    const sr = 2+Math.floor(Math.random()*(ROWS-4-h));
+    const sc = 2+Math.floor(Math.random()*(COLS-4-w));
+    let allWall = true;
+    for (let r=sr;r<sr+h;r++) for(let c=sc;c<sc+w;c++)
+      if (g[r][c]!==T.WALL) { allWall=false; break; }
+    if (!allWall) continue;
+    const neighbours = [];
+    for (let c=sc;c<sc+w;c++) {
+      if(sr>0&&g[sr-1][c]===T.PATH) neighbours.push(1);
+      if(sr+h<ROWS&&g[sr+h][c]===T.PATH) neighbours.push(1);
+    }
+    for (let r=sr;r<sr+h;r++) {
+      if(sc>0&&g[r][sc-1]===T.PATH) neighbours.push(1);
+      if(sc+w<COLS&&g[r][sc+w]===T.PATH) neighbours.push(1);
+    }
+    if (neighbours.length < 2) continue;
+    for (let r=sr;r<sr+h;r++) for(let c=sc;c<sc+w;c++) g[r][c]=T.STORE;
+    storeBlocks.push({r:sr,c:sc,w,h,name:shuffled[si%shuffled.length]}); si++;
+  }
+
+  // Dots
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++)
+    if (g[r][c]===T.PATH) g[r][c]=T.DOT;
+
+  // Power-ups (spread)
+  const powCand = [];
+  for (let r=2;r<ROWS-2;r++) for (let c=2;c<COLS-2;c++)
+    if (g[r][c]===T.DOT) powCand.push([r,c]);
+  powCand.sort(()=>Math.random()-0.5);
+  const chosen = [];
+  for (const [r,c] of powCand) {
+    if (chosen.every(([pr,pc])=>Math.abs(r-pr)+Math.abs(c-pc)>6)) {
+      chosen.push([r,c]);
+      if (chosen.length===4) break;
+    }
+  }
+  chosen.forEach(([r,c],i) => {
+    g[r][c]=T.POWER;
+    powerTypes[r+'_'+c] = i%3;
+  });
+
+  // Escalator far from start
+  let escR,escC;
+  do {
+    escR=1+Math.floor(Math.random()*(ROWS-2));
+    escC=1+Math.floor(Math.random()*(COLS-2));
+  } while(g[escR][escC]!==T.DOT || Math.abs(escR-1)+Math.abs(escC-1)<10);
+  g[escR][escC]=T.ESCALATOR;
+
+  return g;
+}
+
+function countDots(g){
+  let n=0;
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++)
+    if(g[r][c]===T.DOT||g[r][c]===T.POWER) n++;
+  return n;
+}
+
+// ── BFS ───────────────────────────────────────────────────────────────────────
+function bfsNext(fromR, fromC, toR, toC, flee=false) {
+  const sr=Math.max(0,Math.min(ROWS-1,Math.floor(fromR)));
+  const sc=Math.max(0,Math.min(COLS-1,Math.floor(fromC)));
+  const tr=Math.max(0,Math.min(ROWS-1,Math.floor(toR)));
+  const tc=Math.max(0,Math.min(COLS-1,Math.floor(toC)));
+
+  if (flee) {
+    const opts=[[0,1],[0,-1],[1,0],[-1,0]];
+    let best=null,bestD=-1;
+    for(const[dr,dc] of opts){
+      const nr=sr+dr,nc=sc+dc;
+      if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+      if(map[nr][nc]===T.WALL||map[nr][nc]===T.STORE) continue;
+      const d=(nr-tr)**2+(nc-tc)**2;
+      if(d>bestD){bestD=d;best={dr,dc};}
+    }
+    return best||{dr:0,dc:0};
+  }
+
+  if (sr===tr&&sc===tc) return {dr:0,dc:0};
+  const visited = new Uint8Array(ROWS*COLS);
+  const prev    = new Int16Array(ROWS*COLS).fill(-1);
+  const q=[sr*COLS+sc]; visited[sr*COLS+sc]=1;
+  while(q.length){
+    const cur=q.shift();
+    const cr=Math.floor(cur/COLS),cc=cur%COLS;
+    if(cr===tr&&cc===tc){
+      let idx=cur;
+      while(prev[idx]!==-1&&prev[idx]!==sr*COLS+sc) idx=prev[idx];
+      return {dr:Math.floor(idx/COLS)-sr,dc:idx%COLS-sc};
+    }
+    for(const[dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]){
+      const nr=cr+dr,nc=cc+dc;
+      if(nr<0||nr>=ROWS||nc<0||nc>=COLS||visited[nr*COLS+nc]) continue;
+      if(map[nr][nc]===T.WALL||map[nr][nc]===T.STORE) continue;
+      visited[nr*COLS+nc]=1; prev[nr*COLS+nc]=cur; q.push(nr*COLS+nc);
+    }
+  }
+  const opts=[[0,1],[0,-1],[1,0],[-1,0]].sort(()=>Math.random()-0.5);
+  for(const[dr,dc] of opts){
+    const nr=sr+dr,nc=sc+dc;
+    if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&map[nr][nc]!==T.WALL&&map[nr][nc]!==T.STORE)
+      return {dr,dc};
+  }
+  return {dr:0,dc:0};
+}
+
+// ── Enemy helpers ─────────────────────────────────────────────────────────────
+const ENEMY_COUNT = 3;
+const MIN_ENEMY_DIST = 3.5;
+
+function findSpawnPos(exclude=[]) {
+  for(let attempt=0;attempt<200;attempt++){
+    const r=1+Math.floor(Math.random()*(ROWS-2));
+    const c=1+Math.floor(Math.random()*(COLS-2));
+    if(map[r][c]===T.WALL||map[r][c]===T.STORE) continue;
+    if(Math.abs(r-playerY)+Math.abs(c-playerX)<7) continue;
+    const tooClose=exclude.some(([er,ec])=>Math.abs(r-er)+Math.abs(c-ec)<MIN_ENEMY_DIST*2);
+    if(tooClose) continue;
+    return [r,c];
+  }
+  return [ROWS-2,COLS-2];
+}
+
+function spawnEnemies(){
+  const positions=[];
+  return Array.from({length:ENEMY_COUNT},(_,i)=>{
+    const [r,c]=findSpawnPos(positions);
+    positions.push([r,c]);
+    return { r:r+0.5, c:c+0.5, lerpR:r+0.5, lerpC:c+0.5,
+             frozen:false, dead:false, respawnTimer:0,
+             bfsTimer:0, bfsDir:{dr:0,dc:0}, id:i };
+  });
+}
+
+// ── Stage init ────────────────────────────────────────────────────────────────
+function initStage(){
+  Object.keys(powerTypes).forEach(k=>delete powerTypes[k]);
+  map = generateMap();
+  dotCount = countDots(map);
+  playerX=1.5; playerY=1.5;
+  playerLerpX=1.5; playerLerpY=1.5;
+  playerFacing={x:0,y:1};
+  inputDir={x:0,y:0}; nextDir={x:0,y:0};
+  enemies = spawnEnemies();
+  powered=false; powerTimer=0;
+  escalatorActive=false;
+  stopBgHum();
+  document.getElementById('powerup-bar').style.display='none';
+  showFlash('Floor '+floor+' 🛗');
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function buildLegend(){
+  const grid = document.getElementById('legend-grid');
+  const items=[
+    {img:IMGS.water,     label:'Water = 10 pts'},
+    {img:IMGS.coffee,    label:'Iced Coffee = Power-up'},
+    {img:IMGS.ice,       label:'Ice Pack = Power-up'},
+    {img:IMGS.icecream,  label:'Ice Cream = Power-up'},
+    {img:IMGS.heatwave,  label:'Heat Wave = Enemy'},
+    {img:IMGS.frozen,    label:'Frozen = Stomp!'},
+  ];
+  grid.innerHTML='';
+  items.forEach(({img,label})=>{
+    const div=document.createElement('div');
+    div.className='legend-item';
+    if(img&&img.naturalWidth>0){
+      const i=document.createElement('img');
+      i.src=img.src; i.alt=label;
+      div.appendChild(i);
+    } else {
+      const sp=document.createElement('span');
+      sp.textContent='🟦'; div.appendChild(sp);
+    }
+    const sp=document.createElement('span'); sp.textContent=label;
+    div.appendChild(sp);
+    grid.appendChild(div);
+  });
+}
+
+function updateUI(){
+  document.getElementById('score-val').textContent=score;
+  document.getElementById('floor-val').textContent=floor;
+  const lv=document.getElementById('lives');
+  lv.innerHTML='';
+  const spriteKey = getPlayerSprite();
+  for(let i=0;i<lives;i++){
+    const img=document.createElement('img');
+    img.className='life-img';
+    img.src=IMGS[spriteKey]&&IMGS[spriteKey].naturalWidth>0 ? IMGS[spriteKey].src : '';
+    img.textContent='👩';
+    lv.appendChild(img);
+  }
+}
+
+function showFlash(txt){
+  const el=document.getElementById('stage-flash');
+  el.textContent=txt; el.style.opacity='1';
+  setTimeout(()=>el.style.opacity='0',1400);
+}
+
+// ── Collision ─────────────────────────────────────────────────────────────────
+function canMove(dx,dy,px,py,dist){
+  if(dx===0&&dy===0) return false;
+  const nx=px+dx*dist, ny=py+dy*dist, m=0.32;
+  for(const[r,c] of [[ny-m,nx-m],[ny-m,nx+m],[ny+m,nx-m],[ny+m,nx+m]]){
+    const ir=Math.floor(r),ic=Math.floor(c);
+    if(ir<0||ir>=ROWS||ic<0||ic>=COLS) return false;
+    if(map[ir][ic]===T.WALL||map[ir][ic]===T.STORE) return false;
+  }
+  return true;
+}
+function canMoveEnemy(dr,dc,r,c){
+  const nr=r+dr*0.25,nc=c+dc*0.25;
+  const ir=Math.floor(nr),ic=Math.floor(nc);
+  if(ir<0||ir>=ROWS||ic<0||ic>=COLS) return false;
+  return map[ir][ic]!==T.WALL&&map[ir][ic]!==T.STORE;
+}
+
+// ── Game loop ─────────────────────────────────────────────────────────────────
+function gameLoop(ts){
+  if(!gameRunning||paused) return;
+  const dt=Math.min((ts-lastTime)/1000,0.05);
+  lastTime=ts;
+  update(dt);
+  drawAll();
+  requestAnimationFrame(gameLoop);
+}
+
+function update(dt){
+  if(dying){
+    dyingTimer-=dt;
+    if(dyingTimer<=0){ dying=false; invincible=true; invincibleTimer=2; }
+    return;
+  }
+  if(invincible){ invincibleTimer-=dt; if(invincibleTimer<=0) invincible=false; }
+
+  playerAnim+=dt*7;
+
+  // Power timer
+  if(powered){
+    powerTimer-=dt*1000;
+    document.getElementById('powerup-fill').style.width=(Math.max(0,powerTimer)/POWER_DURATION*100)+'%';
+    if(powerTimer<=0){
+      powered=false;
+      document.getElementById('powerup-bar').style.display='none';
+      enemies.forEach(e=>{ if(!e.dead) e.frozen=false; });
+      playMusic(MUSIC_NORMAL_SRC); // swap back to normal track
+    }
+  }
+
+  // Move player
+  const SPEED=5;
+  const movedNext = canMove(nextDir.x,nextDir.y,playerX,playerY,SPEED*dt);
+  if(movedNext){
+    playerX+=nextDir.x*SPEED*dt; playerY+=nextDir.y*SPEED*dt;
+    inputDir={...nextDir};
+    if(nextDir.x!==0||nextDir.y!==0) playerFacing={...nextDir};
+  } else if(canMove(inputDir.x,inputDir.y,playerX,playerY,SPEED*dt)){
+    playerX+=inputDir.x*SPEED*dt; playerY+=inputDir.y*SPEED*dt;
+    if(inputDir.x!==0||inputDir.y!==0) playerFacing={...inputDir};
+  }
+  playerX=Math.max(0.5,Math.min(COLS-0.5,playerX));
+  playerY=Math.max(0.5,Math.min(ROWS-0.5,playerY));
+  playerLerpX+=(playerX-playerLerpX)*0.35;
+  playerLerpY+=(playerY-playerLerpY)*0.35;
+
+  // Step sound
+  if(movedNext||(inputDir.x!==0||inputDir.y!==0)){
+    stepTimer-=dt;
+    if(stepTimer<=0){ stepTimer=0.22; playStep(); }
+  }
+
+  // Collect
+  const cr=Math.floor(playerY), cc=Math.floor(playerX);
+  if(cr>=0&&cr<ROWS&&cc>=0&&cc<COLS){
+    const cell=map[cr][cc];
+    if(cell===T.DOT){
+      map[cr][cc]=T.PATH; score+=10; dotCount--; updateUI(); playDot();
+    } else if(cell===T.POWER){
+      map[cr][cc]=T.PATH; dotCount--;
+      delete powerTypes[cr+'_'+cc];
+      activatePower(); updateUI();
+    } else if(cell===T.ESCALATOR&&escalatorActive){
+      nextFloor(); return;
+    }
+  }
+  if(dotCount<=0&&!escalatorActive){
+    escalatorActive=true;
+    showFlash('Find the Escalator! 🛗');
+    playEscalator();
+  }
+
+  // Enemies
+  const ESPD = (powered ? 2.2 : 3.8) * (1+floor*0.06);
+  enemies.forEach(e=>{
+    if(e.dead){
+      e.respawnTimer-=dt;
+      if(e.respawnTimer<=0){
+        e.dead=false; e.frozen=false;
+        const live=enemies.filter(x=>!x.dead&&x!==e).map(x=>[x.r,x.c]);
+        const [nr,nc]=findSpawnPos(live);
+        e.r=nr+0.5; e.c=nc+0.5; e.lerpR=e.r; e.lerpC=e.c;
+      }
+      return;
+    }
+
+    e.bfsTimer-=dt;
+    if(e.bfsTimer<=0){
+      e.bfsTimer=0.35+Math.random()*0.15;
+      e.bfsDir = powered&&e.frozen
+        ? bfsNext(e.r,e.c,playerY,playerX,true)
+        : bfsNext(e.r,e.c,playerY,playerX,false);
+    }
+
+    const {dr,dc}=e.bfsDir;
+    const spd=e.frozen?2:ESPD;
+    if(dr!==0||dc!==0){
+      const len=Math.sqrt(dr*dr+dc*dc)||1;
+      const ndx=dr/len,ndy=dc/len;
+      if(canMoveEnemy(ndx,ndy,e.r,e.c)){
+        e.r+=ndx*spd*dt; e.c+=ndy*spd*dt;
+      } else {
+        for(const[pr,pc] of [[ndy,ndx],[-ndy,-ndx],[0,1],[0,-1],[1,0],[-1,0]]){
+          if(canMoveEnemy(pr,pc,e.r,e.c)){ e.r+=pr*spd*dt; e.c+=pc*spd*dt; break; }
+        }
+        e.bfsTimer=0;
+      }
+    }
+    e.lerpR+=(e.r-e.lerpR)*0.38;
+    e.lerpC+=(e.c-e.lerpC)*0.38;
+
+    // Separation
+    enemies.forEach(other=>{
+      if(other===e||other.dead) return;
+      const ddr=e.r-other.r, ddc=e.c-other.c;
+      const dist=Math.sqrt(ddr*ddr+ddc*ddc);
+      if(dist<MIN_ENEMY_DIST&&dist>0.01){
+        const push=(MIN_ENEMY_DIST-dist)*0.3;
+        e.r+=ddr/dist*push; e.c+=ddc/dist*push;
+      }
+    });
+
+    // Collision
+    const dist=Math.hypot(e.r-playerY,e.c-playerX);
+    if(dist<0.65){
+      if(e.frozen){ e.dead=true; e.respawnTimer=6+Math.random()*3; score+=200; updateUI(); showFlash('+200! 🥶'); playKill(); }
+      else if(!invincible){ hitPlayer(); }
+    }
+  });
+}
+
+function activatePower(){
+  powered=true; powerTimer=POWER_DURATION;
+  enemies.forEach(e=>{ if(!e.dead) e.frozen=true; });
+  document.getElementById('powerup-bar').style.display='block';
+  document.getElementById('powerup-fill').style.width='100%';
+  showFlash('❄️ FROZEN!'); playPower();
+  playMusic(MUSIC_FREEZE_SRC); // swap to freeze track
+}
+
+function hitPlayer(){
+  lives--; updateUI();
+  dying=true; dyingTimer=0.7; playDie();
+  if(lives<=0){ setTimeout(endGame,800); return; }
+  playerX=1.5; playerY=1.5; playerLerpX=1.5; playerLerpY=1.5;
+  inputDir={x:0,y:0}; nextDir={x:0,y:0};
+  showFlash('💀 Ouch!');
+}
+
+function nextFloor(){
+  floor++; lives=3; score+=floor*100; // ← lives reset to 3 on escalator
+  updateUI(); playEscalator();
+  initStage();
+}
+
+function endGame(){
+  gameRunning=false; stopMusic();
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`
+    <h1>GAME OVER</h1>
+    <p class="subtitle" style="font-size:20px;color:#4df;font-weight:900;">Score: ${score}</p>
+    <p style="color:#abc;">You reached Floor ${floor}.<br>The heat waves got you!</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+      <button class="big-btn" id="start-btn">▶ PLAY AGAIN</button>
+      <button class="ghost-btn" onclick="goToCharSelect()">Change Character</button>
+    </div>`;
+  ov.style.display='flex';
+  document.getElementById('start-btn').addEventListener('click', startGame);
+}
+
+function startGame(){
+  if(!selectedChar){ goToCharSelect(); return; }
+  score=0; lives=3; floor=1;
+  invincible=false; dying=false; paused=false;
+  updateUI(); initStage();
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('pause-overlay').style.display='none';
+  document.getElementById('pause-btn').textContent='⏸ Pause';
+  gameRunning=true; lastTime=performance.now();
+  playMusic(MUSIC_NORMAL_SRC);
+  requestAnimationFrame(gameLoop);
+}
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+
+// ── Drawing ───────────────────────────────────────────────────────────────────
+function drawAll(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawMap();
+  drawEnemies();
+  drawPlayer();
+}
+
+const C_PATH  = '#dce8f0';
+const C_WALL  = '#abc8dc';
+const C_STORE = '#6fa8c8';
+const C_FLOOR = '#e5eff7';
+
+function drawMap(){
+  ctx.fillStyle=C_FLOOR;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const x=c*TILE, y=r*TILE, cell=map[r][c];
+
+      if(cell===T.WALL){
+        ctx.fillStyle=C_WALL;
+        ctx.fillRect(x,y,TILE,TILE);
+        ctx.fillStyle='rgba(255,255,255,0.18)';
+        ctx.fillRect(x,y,TILE,2); ctx.fillRect(x,y,2,TILE);
+        ctx.fillStyle='rgba(0,0,0,0.12)';
+        ctx.fillRect(x,y+TILE-2,TILE,2); ctx.fillRect(x+TILE-2,y,2,TILE);
+      } else if(cell===T.STORE){
+        // drawn by storeBlocks pass below
+      } else {
+        ctx.fillStyle=C_PATH;
+        ctx.fillRect(x,y,TILE,TILE);
+        ctx.strokeStyle='rgba(140,175,200,0.18)';
+        ctx.lineWidth=0.5; ctx.strokeRect(x,y,TILE,TILE); ctx.lineWidth=1;
+
+        if(cell===T.DOT){
+          const s=TILE*0.52;
+          drawImg('water', x+TILE/2-s/2, y+TILE/2-s/2, s, s);
+
+        } else if(cell===T.POWER){
+          const type=powerTypes[r+'_'+c]??0;
+          const key=powerImgKeys[type];
+          const pulse=1+0.12*Math.sin(Date.now()/350);
+          const s=TILE*0.78*pulse;
+          ctx.save();
+          ctx.globalAlpha=0.22+0.1*Math.sin(Date.now()/300);
+          ctx.fillStyle='#00e5ff';
+          ctx.beginPath(); ctx.arc(x+TILE/2,y+TILE/2,TILE*0.44,0,Math.PI*2); ctx.fill();
+          ctx.globalAlpha=1;
+          drawImg(key, x+TILE/2-s/2, y+TILE/2-s/2, s, s);
+          ctx.restore();
+
+        } else if(cell===T.ESCALATOR){
+          const active=escalatorActive;
+          const escKey = active ? 'escalator_on' : 'escalator_off';
+          const escImg = IMGS[escKey];
+          if(escImg && escImg.naturalWidth>0){
+            // Use the custom escalator image
+            const s=TILE*0.92;
+            ctx.drawImage(escImg, x+TILE/2-s/2, y+TILE/2-s/2, s, s);
+          } else {
+            // Fallback drawn escalator
+            ctx.fillStyle=active?'#1a88ff':'#8899aa';
+            ctx.fillRect(x+2,y+2,TILE-4,TILE-4);
+            for(let s=0;s<3;s++){
+              ctx.fillStyle=active?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.15)';
+              ctx.fillRect(x+4+s*(TILE-8)/3,y+4,(TILE-8)/3-2,TILE-8);
+            }
+            ctx.fillStyle='#fff';
+            ctx.font=`bold ${TILE*0.45}px serif`;
+            ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(active?'🔼':'⬜',x+TILE/2,y+TILE/2);
+          }
+          if(active){
+            ctx.strokeStyle=`rgba(0,180,255,${0.6+0.4*Math.sin(Date.now()/180)})`;
+            ctx.lineWidth=2.5; ctx.strokeRect(x+2,y+2,TILE-4,TILE-4); ctx.lineWidth=1;
+          }
+        }
+      }
+    }
+  }
+
+  // Store blocks
+  storeBlocks.forEach(({r,c,w,h,name})=>{
+    const x=c*TILE, y=r*TILE, bw=w*TILE, bh=h*TILE;
+    ctx.fillStyle=C_STORE;
+    ctx.fillRect(x,y,bw,bh);
+    ctx.fillStyle='rgba(30,80,130,0.6)';
+    ctx.fillRect(x,y,bw,TILE*0.28);
+    ctx.fillStyle='rgba(200,235,255,0.25)';
+    ctx.fillRect(x+bw*0.3,y+bh*0.3,bw*0.4,bh*0.55);
+    ctx.strokeStyle='rgba(50,100,160,0.7)';
+    ctx.lineWidth=1.5; ctx.strokeRect(x+0.75,y+0.75,bw-1.5,bh-1.5); ctx.lineWidth=1;
+    ctx.fillStyle='#fff';
+    ctx.font=`900 ${Math.max(7,Math.min(TILE*0.3,13))}px 'Segoe UI',sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(name, x+bw/2, y+TILE*0.14);
+    ctx.fillStyle='rgba(200,230,255,0.6)';
+    ctx.font=`${Math.max(6,TILE*0.2)}px 'Segoe UI',sans-serif`;
+    ctx.fillText('STORE', x+bw/2, y+bh*0.65);
+  });
+}
+
+function drawPlayer(){
+  if(dying && Math.floor(dyingTimer*12)%2===0) return;
+  if(invincible && Math.floor(invincibleTimer*8)%2===0) return;
+
+  const px=playerLerpX*TILE, py=playerLerpY*TILE;
+  const s=TILE*0.92;
+  const spriteKey = getPlayerSprite();
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.15)';
+  ctx.beginPath();
+  ctx.ellipse(px,py+s*0.44,s*0.3,s*0.08,0,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(px,py);
+
+  // Draw directional sprite
+  drawImg(spriteKey, -s/2, -s/2, s, s);
+
+  // Invincibility blue shimmer
+  if(invincible){
+    ctx.globalAlpha=0.3;
+    ctx.fillStyle='#00aaff';
+    ctx.fillRect(-s/2,-s/2,s,s);
+    ctx.globalAlpha=1;
+  }
+
+  ctx.restore();
+}
+
+function drawEnemies(){
+  enemies.forEach(e=>{
+    if(e.dead) return;
+    const x=e.lerpC*TILE, y=e.lerpR*TILE;
+    const s=TILE*0.88;
+    const t=Date.now()/300;
+
+    ctx.save();
+    ctx.translate(x,y);
+
+    ctx.fillStyle='rgba(0,0,0,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(0,s*0.44,s*0.3,s*0.08,0,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.rotate(Math.sin(t+e.id*1.3)*0.07);
+
+    if(e.frozen){
+      const flash=powered&&powerTimer<2500&&Math.floor(powerTimer/250)%2===0;
+      ctx.globalAlpha=flash?0.5:1;
+      drawImg('frozen',-s/2,-s/2,s,s);
+      ctx.globalAlpha=1;
+    } else {
+      drawImg('heatwave',-s/2,-s/2,s,s);
+      ctx.strokeStyle=`rgba(255,100,0,${0.2+0.18*Math.sin(t*2+e.id)})`;
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(0,0,s*0.52,0,Math.PI*2); ctx.stroke();
+      ctx.lineWidth=1;
+    }
+    ctx.restore();
+  });
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+loadImgs(()=>{
+  resize();
+  // Update character preview images once loaded
+  const pa = IMGS['Player_A_Forward'];
+  const pb = IMGS['Player_B_Forward'];
+  if(pa&&pa.naturalWidth>0) document.getElementById('preview-a').src=pa.src;
+  if(pb&&pb.naturalWidth>0) document.getElementById('preview-b').src=pb.src;
+  // Build legend after images load
+  document.getElementById('overlay').addEventListener('show',buildLegend);
+});
+
+</script>
+</body>
+</html>
